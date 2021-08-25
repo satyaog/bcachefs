@@ -410,7 +410,12 @@ struct bch_sb *benz_bch_realloc_sb(struct bch_sb *sb, uint64_t size)
     {
         size = benz_bch_get_sb_size(sb);
     }
-    return realloc(sb, size);
+    struct bch_sb *ret = realloc(sb, size);
+    if (sb && ret != sb)
+    {
+        free(sb);
+    }
+    return ret;
 }
 
 inline struct btree_node *benz_bch_malloc_btree_node(const struct bch_sb *sb)
@@ -577,12 +582,12 @@ int BCacheFS_open(BCacheFS *this, const char *path)
     }
     int ret = 0;
     this->fp = fopen(path, "rb");
-    this->sb = benz_bch_realloc_sb(NULL, 0);
     if (this->fp)
     {
         fseek(this->fp, 0L, SEEK_END);
         this->size = ftell(this->fp);
         fseek(this->fp, 0L, SEEK_SET);
+        this->sb = benz_bch_realloc_sb(NULL, 0);
     }
     if (this->sb && benz_bch_fread_sb(this->sb, 0, this->fp))
     {

@@ -14,6 +14,9 @@
 
 static void PyBCacheFS_dealloc(PyBCacheFS* self)
 {
+    printf("PyBCacheFS_dealloc: s:%p, _fs:%p\n",
+           (const void*)self,
+           (const void*)&self->_fs);
     BCacheFS_fini(&self->_fs);
     Py_TYPE(self)->tp_free(self);
 }
@@ -162,6 +165,10 @@ static PyTypeObject PyBCacheFSType = {
 
 static void PyBCacheFS_iterator_dealloc(PyBCacheFS_iterator* self)
 {
+    printf("PyBCacheFS_iterator_dealloc: s:%p, _pyfs:%p, _i:%p\n",
+           (const void*)self,
+           (const void*)self->_pyfs,
+           (const void*)&self->_iter);
     BCacheFS_iter_fini(&self->_pyfs->_fs, &self->_iter);
     Py_XDECREF((PyObject*)self->_pyfs);
     Py_TYPE(self)->tp_free(self);
@@ -184,22 +191,20 @@ static PyObject* PyBCacheFS_iterator_new(PyTypeObject* type, PyObject* args, PyO
 
 static PyObject *PyBCacheFS_iterator_next(PyBCacheFS_iterator *self)
 {
-    PyTupleObject *ret = (PyTupleObject*)Py_None;
     const BCacheFS *fs = &self->_pyfs->_fs;
     BCacheFS_iterator *iter = &self->_iter;
     const struct bch_val *bch_val = BCacheFS_iter_next(fs, iter);
     if (bch_val && iter->type == BTREE_ID_extents)
     {
         BCacheFS_extent extent = BCacheFS_iter_make_extent(fs, iter);
-        ret = (PyTupleObject*)Py_BuildValue("KKKK", extent.inode, extent.file_offset, extent.offset, extent.size);
+        return Py_BuildValue("KKKK", extent.inode, extent.file_offset, extent.offset, extent.size);
     }
     else if (bch_val && iter->type == BTREE_ID_dirents)
     {
         BCacheFS_dirent dirent = BCacheFS_iter_make_dirent(fs, iter);
-        ret = (PyTupleObject*)Py_BuildValue("KKIU", dirent.parent_inode, dirent.inode, (uint32_t)dirent.type, dirent.name);
+        return Py_BuildValue("KKIU", dirent.parent_inode, dirent.inode, (uint32_t)dirent.type, dirent.name);
     }
-    Py_INCREF(ret);
-    return (PyObject*)ret;
+    return Py_None;
 }
 
 /**
