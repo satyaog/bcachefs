@@ -100,7 +100,7 @@ static PyObject* PyBcachefs_getsize(PyBcachefs* self, void* closure)
 static PyMethodDef PyBcachefs_methods[] = {
     {"open", (PyCFunction)(_PyCFunctionFastWithKeywords)PyBcachefs_open,
      METH_FASTCALL | METH_KEYWORDS, "Open bcachefs file to read"},
-    {"close", (PyCFunction)(PyNoArgsFunction)PyBcachefs_close, METH_NOARGS, "Close bcachefs file"},
+    {"close", (PyCFunction)PyBcachefs_close, METH_NOARGS, "Close bcachefs file"},
     {"iter", (PyCFunction)(_PyCFunctionFastWithKeywords)PyBcachefs_iter,
      METH_FASTCALL | METH_KEYWORDS, "Iterate over entries of specified type"},
     {NULL, NULL, 0, NULL}  /* Sentinel */
@@ -195,7 +195,7 @@ static PyObject *PyBcachefs_iterator_next(PyBcachefs_iterator *self)
     else if (bch_val && iter->type == BTREE_ID_dirents)
     {
         Bcachefs_dirent dirent = Bcachefs_iter_make_dirent(fs, iter);
-        return Py_BuildValue("KKIU", dirent.parent_inode, dirent.inode, (uint32_t)dirent.type, dirent.name);
+        return Py_BuildValue("KKIU#", dirent.parent_inode, dirent.inode, (uint32_t)dirent.type, dirent.name, dirent.name_len);
     }
     return Py_None;
 }
@@ -205,7 +205,7 @@ static PyObject *PyBcachefs_iterator_next(PyBcachefs_iterator *self)
  */
 
 static PyMethodDef PyBcachefs_iterator_methods[] = {
-    {"next", (PyCFunction)(PyNoArgsFunction)PyBcachefs_iterator_next, METH_NOARGS, "Iterate to next item"},
+    {"next", (PyCFunction)PyBcachefs_iterator_next, METH_NOARGS, "Iterate to next item"},
     {NULL, NULL, 0, NULL}  /* Sentinel */
 };
 

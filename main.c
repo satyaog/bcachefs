@@ -4,10 +4,13 @@
 
 #include "bcachefs/bcachefs.h"
 
+#define MINI "testdata/mini_bcachefs.img"
+
+
 int main()
 {
     Bcachefs bchfs = {0};
-    if (Bcachefs_open(&bchfs, "testdata/mini_bcachefs.img")) {}
+    if (Bcachefs_open(&bchfs, MINI)) {}
     else
     {
         return 1;
@@ -89,11 +92,13 @@ int main()
     for (; bch_val; bch_val = Bcachefs_iter_next(&bchfs, &bchfs_iter))
     {
         Bcachefs_dirent dirent = Bcachefs_iter_make_dirent(&bchfs, &bchfs_iter);
+        char fname[30] = {0};
+        memcpy(fname, dirent.name, dirent.name_len);
         printf("dirent: p:%llu, i:%llu, t:%u, %s\n",
                dirent.parent_inode,
                dirent.inode,
                dirent.type,
-               dirent.name);
+               fname);
     }
     Bcachefs_iter_fini(&bchfs, &bchfs_iter);
     Bcachefs_fini(&bchfs);
