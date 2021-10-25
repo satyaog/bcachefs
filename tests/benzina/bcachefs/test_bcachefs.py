@@ -118,7 +118,9 @@ def test_file_size(image):
         for extent in extents:
             size_check += extent.size
 
-        assert size_check - 1 == file_size, "sum of extends is equal to file_size (minus the null character)"
+        assert (
+            size_check - 1 == file_size
+        ), "sum of extends is equal to file_size (minus the null character)"
 
 
 @pytest.mark.parametrize("image", TEST_IMAGES)
@@ -146,7 +148,9 @@ def test_walk(image):
 def test_cursor___iter__(image):
     assert os.path.exists(image)
     with Bcachefs(image) as fs, Bcachefs(image).cd() as cursor:
-        assert sorted([ent.name for ent in cursor]) == sorted([ent.name for ent in fs])
+        assert sorted([ent.name for ent in cursor]) == sorted(
+            [ent.name for ent in fs]
+        )
         cursor.cd("dir")
         assert sorted([ent.name for ent in cursor]) == ["file2", "subdir"]
 
