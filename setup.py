@@ -44,7 +44,7 @@ setup(
     description="Fast Disk Image for HPC",
     long_description=open("README.rst").read(),
     license="MIT",
-    url="https://github.com/mila-iqia/bcachefs",
+    url="https://bcachefs.readthedocs.io/en/latest",
     classifiers=[
         "Operating System :: POSIX",
         "Operating System :: Unix",

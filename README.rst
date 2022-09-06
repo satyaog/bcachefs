@@ -16,6 +16,8 @@
 bcachefs
 ########
 
+📖 `Read the documentation <https://bcachefs.readthedocs.io/en/latest>`_
+
 C implementation with Python 3.7+ bindings for Bcachefs
 
 .. code-block:: python
