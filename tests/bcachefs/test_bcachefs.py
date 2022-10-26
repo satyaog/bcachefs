@@ -159,8 +159,27 @@ def test_cd(bchfs: bch.Bcachefs):
         assert cursor.pwd == "dir/subdir"
         with cursor.cd() as c:
             assert c.pwd == ""
+            assert c.read("dir/subdir/file2") == cursor.read("file2")
         with cursor.cd("/") as c:
             assert c.pwd == ""
+
+        expected_walk = list(cursor.walk())
+
+        # check cached dirents
+        for result, expected in zip(cursor.walk(), expected_walk):
+            assert result[0] == expected[0]
+            for d, e_d in zip(result[1], expected[1]):
+                assert d is e_d
+            for f, e_f in zip(result[2], expected[2]):
+                assert f is e_f
+
+        assert not cursor.scandir("n04467665")
+        assert list(cursor.scandir("/n04467665")) == list(
+            bchfs.scandir("/n04467665")
+        )
+        assert cursor.read("/n04467665/n04467665_63788.JPEG") == bchfs.read(
+            "/n04467665/n04467665_63788.JPEG"
+        )
 
 
 @pytest.mark.images_only([MINI])

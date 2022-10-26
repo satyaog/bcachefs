@@ -321,7 +321,7 @@ class _BcachefsFileBinary(io.BufferedIOBase):
 
 class FilesystemMixin:
     def __init__(self):
-        self._file = None
+        self._file: io.RawIOBase = None
 
     def __enter__(self):
         self.mount()
@@ -436,7 +436,7 @@ class FilesystemMixin:
         else:
             parent = self._find_dirent(path)
 
-        return self._find_dirents(parent)
+        return self._find_dirents(parent) if parent else None
 
     def umount(self):
         """Unmount of the disk image. This invalidates all open files objects
@@ -631,6 +631,7 @@ class ZipFileLikeMixin(FilesystemMixin):
 class Bcachefs(ZipFileLikeMixin):
     def __init__(self, path: str, mode: str = "rb"):
         assert mode in ("r", "rb"), "Only reading is supported"
+        super().__init__()
         self._filesystem = _Bcachefs()
         self._filesystem.open(path)
         self._file: io.RawIOBase = open(path, "rb")
@@ -756,6 +757,7 @@ class Cursor(ZipFileLikeMixin):
         inodes_tree=None,
         inode_map=None,
     ):
+        super().__init__()
         fs = Bcachefs(filesystem) if isinstance(filesystem, str) else filesystem
         self._file = open(fs.filename, "rb")
         self._pwd = path.strip("/")
@@ -766,9 +768,14 @@ class Cursor(ZipFileLikeMixin):
         self._inode_map = inode_map
         self._parse(fs)
 
+        # self._fs is used to init cache and as a backup for content not included in cache
+        self._fs = Bcachefs(fs.filename)
+
     def __enter__(self):
         if self._file.closed:
             self._file = open(self._file.name, "rb")
+        if self._fs.unmounted:
+            self._fs = Bcachefs(self._file.name)
         return self
 
     def __exit__(self, type, value, traceback):
@@ -806,8 +813,9 @@ class Cursor(ZipFileLikeMixin):
     def cd(self, path: Union[str, int] = ""):
         if not path:
             path = "/"
-        if self._find_dirent(path):
-            fs = self
+        dirent = self._find_dirent(path)
+        if dirent and self._inodes_tree.get(dirent.inode, None) is not None:
+            fs = self._fs
             extents_map = self._extents_map
             inodes_ls = self._inodes_ls
             inodes_tree = self._inodes_tree
@@ -824,6 +832,8 @@ class Cursor(ZipFileLikeMixin):
     def close(self):
         if not self._file.closed:
             self._file.close()
+        if not self._fs.unmounted:
+            self._fs.umount()
 
     def _find_extent(self, inode: int, file_offset: int) -> Extent:
         for extent in self._find_extents(inode):
@@ -831,17 +841,20 @@ class Cursor(ZipFileLikeMixin):
                 return extent
             elif extent.file_offset > file_offset:
                 break
+        return self._fs._find_extent(inode, file_offset)
 
     def _find_extents(self, inode: int) -> Generator[Extent, None, None]:
         extents = self._extents_map.get(inode, None)
         if extents is None:
-            raise StopIteration
-        else:
-            for extent in extents:
-                yield extent
+            extents = self._fs._find_extents(inode)
+        for extent in extents:
+            yield extent
 
     def _find_inode(self, inode: int) -> Inode:
-        return self._inode_map.get(inode, None)
+        ent = self._inode_map.get(inode, None)
+        if ent is None:
+            ent = self._fs._find_inode(inode)
+        return ent
 
     def _find_dirent(self, path: str = None) -> DirEnt:
         dirent = ROOT_DIRENT if path and path.startswith("/") else self._dirent
@@ -849,7 +862,7 @@ class Cursor(ZipFileLikeMixin):
             dirent is not self._dirent
             and self._inodes_ls.get(dirent.inode, None) is None
         ):
-            dirent = None
+            dirent = self._fs._find_dirent(path)
         elif path:
             parts = [p for p in path.split("/") if p]
             while parts:
@@ -861,7 +874,10 @@ class Cursor(ZipFileLikeMixin):
         return dirent
 
     def _find_dirents(self, dirent: DirEnt = None) -> DirEnt:
-        for ent in self._inodes_ls[dirent.inode]:
+        dirents = self._inodes_ls.get(dirent.inode, None)
+        if dirents is None:
+            dirents = self._fs._find_dirents(dirent)
+        for ent in dirents:
             yield ent
 
     def _parse(self, filesystem: Bcachefs):
