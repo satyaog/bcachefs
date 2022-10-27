@@ -51,23 +51,33 @@ typedef struct Bcachefs_iterator {
 } Bcachefs_iterator;
 #define BCACHEFS_ITERATOR_CLEAN (Bcachefs_iterator){.type = BTREE_ID_NR}
 
-typedef struct {
+typedef struct Bcachefs_iterator_current {
+    Bcachefs_iterator *iter;
+    struct bkey_local_buffer reference;
+    Bcachefs_iterator begin;
+} Bcachefs_iterator_current;
+#define BCACHEFS_ITERATOR_CURRENT_CLEAN (Bcachefs_iterator_current){ \
+    .reference = (struct bkey_local_buffer){0}, \
+    .begin = BCACHEFS_ITERATOR_CLEAN \
+}
+
+typedef struct Bcachefs {
     FILE *fp;
     long size;
     struct bch_sb *sb;
     Bcachefs_iterator *_iter;
-    Bcachefs_iterator _extents_iter_begin;
-    Bcachefs_iterator _inodes_iter_begin;
-    Bcachefs_iterator _dirents_iter_begin;
+    Bcachefs_iterator_current _extents_iter;
+    Bcachefs_iterator_current _inodes_iter;
+    Bcachefs_iterator_current _dirents_iter;
     Bcachefs_inode _root_stats;
     Bcachefs_dirent _root_dirent;
 } Bcachefs;
 #define BCACHEFS_CLEAN (Bcachefs){ \
-    ._extents_iter_begin = BCACHEFS_ITERATOR_CLEAN, \
-    ._inodes_iter_begin = BCACHEFS_ITERATOR_CLEAN, \
-    ._dirents_iter_begin = BCACHEFS_ITERATOR_CLEAN, \
     ._root_stats = (Bcachefs_inode){0}, \
-    ._root_dirent = (Bcachefs_dirent){0} \
+    ._root_dirent = (Bcachefs_dirent){0}, \
+    ._extents_iter = BCACHEFS_ITERATOR_CURRENT_CLEAN, \
+    ._inodes_iter = BCACHEFS_ITERATOR_CURRENT_CLEAN, \
+    ._dirents_iter = BCACHEFS_ITERATOR_CURRENT_CLEAN \
 }
 
 /*! @brief Open a Bcachefs disk image for reading
