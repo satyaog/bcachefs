@@ -3,7 +3,7 @@
 import io
 import os
 from dataclasses import dataclass
-from typing import Generator, List, Tuple, Union
+from typing import Generator, Union
 
 import numpy as np
 
@@ -88,11 +88,9 @@ class DirEnt:
     type: int = 0
     name: str = ""
 
-    @property
     def is_dir(self):
         return self.type == DIR_TYPE
 
-    @property
     def is_file(self):
         return self.type == FILE_TYPE
 
@@ -319,10 +317,7 @@ class _BcachefsFileBinary(io.BufferedIOBase):
         pass
 
 
-class FilesystemMixin:
-    def __init__(self):
-        self._file: io.RawIOBase = None
-
+class Filesystem:
     def __enter__(self):
         self.mount()
         return self
@@ -332,19 +327,19 @@ class FilesystemMixin:
         self.umount()
 
     def __iter__(self) -> Generator[DirEnt, None, None]:
-        raise NotImplemented
+        raise NotImplementedError()
 
     @property
     def filename(self) -> str:
         """Path of the current disk image"""
-        raise NotImplemented
+        raise NotImplementedError()
 
     @property
     def unmounted(self) -> bool:
         """Is current disk image unmounted"""
-        raise NotImplemented
+        raise NotImplementedError()
 
-    def cd(self, path: Union[str, DirEnt]):
+    def cd(self, path: Union[str, DirEnt] = "") -> "Cursor":
         """Open a cursor to specified directory and cache its content
 
         Parameters
@@ -445,7 +440,7 @@ class FilesystemMixin:
         -----
         This in fact closes the disk image file.
         """
-        raise NotImplemented
+        raise NotImplementedError()
 
     def walk(self, top: str = None):
         """Generate the dirents in a directory tree by walking the tree
@@ -483,7 +478,7 @@ class FilesystemMixin:
             offset of the extent in the file
         """
         del inode, file_offset
-        raise NotImplemented
+        raise NotImplementedError()
 
     def _find_extents(self, inode: int) -> Generator[Extent, None, None]:
         """Return the list of extents descriptors of an inode
@@ -494,7 +489,7 @@ class FilesystemMixin:
             inode integer of a file
         """
         del inode
-        raise NotImplemented
+        raise NotImplementedError()
 
     def _find_inode(self, inode: int) -> Inode:
         """Return the inode informations of a file
@@ -505,7 +500,7 @@ class FilesystemMixin:
             inode integer of a file
         """
         del inode
-        raise NotImplemented
+        raise NotImplementedError()
 
     def _find_dirent(self, path: Union[bytes, str] = None) -> DirEnt:
         """Return the dirent informations of a file
@@ -516,7 +511,7 @@ class FilesystemMixin:
             Path of a file
         """
         del path
-        raise NotImplemented
+        raise NotImplementedError()
 
     def _find_dirents(
         self, dirent: DirEnt = None
@@ -529,11 +524,11 @@ class FilesystemMixin:
             DirEnt of a directory
         """
         del dirent
-        raise NotImplemented
+        raise NotImplementedError()
 
     def _walk(self, top: str, dirent: DirEnt):
         del top, dirent
-        raise NotImplemented
+        raise NotImplementedError()
 
 
 def mount(file) -> "Bcachefs":
@@ -560,206 +555,21 @@ def mount(file) -> "Bcachefs":
     return Bcachefs(file)
 
 
-class ZipFileLikeMixin(FilesystemMixin):
-    """Open a disk image to access its files
-
-    Parameters
-    ----------
-    file: str
-        path to the disk image
-
-    Notes
-    -----
-    This in fact opens the disk image file for reading operations.
-
-    Examples
-    --------
-    >>> with Bcachefs(path_to_file) as image:
-    ...     with image.open('dir/subdir/file2', 'rb') as f:
-    ...         data = f.read()
-    ...         print(data.decode('utf-8'))
-    File content 2
-    <BLANKLINE>
-    """
-
-    @property
-    def closed(self) -> bool:
-        """Is current disk image closed"""
-        return self.unmounted
-
-    def namelist(self):
-        """Returns a list of files contained by this archive
-
-        Notes
-        -----
-        Added for parity with Zipfile interface
-
-        Examples
-        --------
-
-        >>> with Bcachefs(path_to_file, 'r') as image:
-        ...     print(image.namelist())
-        ['file1', 'n09332890/n09332890_29876.JPEG', 'dir/subdir/file2', 'n04467665/n04467665_63788.JPEG', 'n02033041/n02033041_3834.JPEG', 'n02445715/n02445715_16523.JPEG', 'n04584207/n04584207_7936.JPEG']
-        """
-        for root, _, files in self.walk():
-            for f in set(files):
-                yield os.path.join(root, f.name)
-
-    def open(
-        self, name: Union[str, int], mode: str = "rb", encoding: str = "utf-8"
-    ):
-        return FilesystemMixin.open(self, name, mode, encoding)
-
-    def read(self, inode: Union[str, int]) -> memoryview:
-        return FilesystemMixin.read(self, inode)
-
-    def close(self):
-        """Close the disk image. This invalidates all open files objects"""
-        FilesystemMixin.umount(self)
-
-    def cache_dir(self, path: Union[str, DirEnt]):
-        """Open a cursor to specified directory and cache its content
-
-        Parameters
-        ----------
-        path: str, DirEnt
-            Path or DirEnt of a file or directory
-        """
-        return self.cd(path)
-
-
-class Bcachefs(ZipFileLikeMixin):
-    def __init__(self, path: str, mode: str = "rb"):
-        assert mode in ("r", "rb"), "Only reading is supported"
-        super().__init__()
-        self._filesystem = _Bcachefs()
-        self._filesystem.open(path)
-        self._file: io.RawIOBase = open(path, "rb")
-        self._unmounted = False
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, type, value, traceback):
-        del type, value, traceback
-        self.umount()
-
-    def __iter__(self):
-        return BcachefsIterDirEnt(self._filesystem)
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["_file"] = self._file.name
-        del state["_filesystem"]
-        return state
-
-    def __setstate__(self, state):
-        self.__dict__ = {**self.__dict__, **state}
-        self._file = open(self._file, "rb")
-        if self._unmounted:
-            self._filesystem = None
-            self._file.close()
-        else:
-            self._filesystem = _Bcachefs()
-            self._filesystem.open(self._file.name)
-
-    @property
-    def filename(self) -> str:
-        return self._file.name
-
-    @property
-    def unmounted(self) -> bool:
-        return self._unmounted
-
-    def cd(self, path: str = ""):
-        return Cursor(self, path)
-
-    def extents(self):
-        for extent in BcachefsIterExtent(self._filesystem):
-            yield extent
-
-    def inodes(self):
-        for inode in BcachefsIterInode(self._filesystem):
-            yield inode
-
-    def dirents(self):
-        for dirent in BcachefsIterDirEnt(self._filesystem):
-            yield dirent
-
-    def umount(self):
-        if not self._unmounted:
-            self._filesystem.close()
-            self._filesystem = None
-            self._file.close()
-            self._unmounted = True
-
-    def _find_extent(self, inode: int, file_offset: int) -> Extent:
-        extent = (
-            self._filesystem.find_extent(inode, file_offset) if inode else None
-        )
-        return Extent(*extent) if extent else None
-
-    def _find_extents(self, inode: int) -> Generator[Extent, None, None]:
-        extent = self._find_extent(inode, 0)
-        while extent:
-            yield extent
-            extent = self._find_extent(inode, extent.file_offset + extent.size)
-
-    def _find_inode(self, inode: int) -> Inode:
-        inode = self._filesystem.find_inode(inode)
-        return Inode(*inode) if inode else None
-
-    def _find_dirent(self, path: Union[bytes, str] = None) -> DirEnt:
-        dirent = ROOT_DIRENT
-        if path:
-            if isinstance(path, str):
-                path = path.encode()
-            parts = [p for p in path.split(b"/") if p]
-            while parts:
-                dirent = self._filesystem.find_dirent(
-                    dirent.inode, 0, parts.pop(0)
-                )
-                if dirent is None:
-                    break
-                else:
-                    dirent = DirEnt(*dirent)
-        return dirent
-
-    def _find_dirents(
-        self, dirent: DirEnt = None
-    ) -> Generator[DirEnt, None, None]:
-        iter = BcachefsIterDirEnt(self._filesystem)
-        for ent in iter:
-            if ent.parent_inode == dirent.inode:
-                yield ent
-            elif ent.parent_inode > dirent.inode:
-                break
-
-    def _walk(self, top: str, dirent: DirEnt):
-        ls = set(self.scandir(dirent))
-        dirs = [ent for ent in ls if ent.is_dir]
-        files = [ent for ent in ls if not ent.is_dir]
-        yield top, dirs, files
-        for d in dirs:
-            yield from self._walk(os.path.join(top, d.name), d)
-
-
-class Cursor(ZipFileLikeMixin):
+class Cursor(Filesystem):
     """Cursor of a filesystem opened at a specific directory. Calls will be made
     relative to that directory and its recursive content will be cached"""
 
     def __init__(
         self,
-        filesystem: Union[str, FilesystemMixin],
+        filesystem: Union[str, Filesystem],
         path: str,
         extents_map=None,
         inodes_ls=None,
         inodes_tree=None,
         inode_map=None,
     ):
-        super().__init__()
         fs = Bcachefs(filesystem) if isinstance(filesystem, str) else filesystem
-        self._file = open(fs.filename, "rb")
+        self._file: io.RawIOBase = open(fs.filename, "rb")
         self._pwd = path.strip("/")
         self._dirent = fs._find_dirent(path)
         self._extents_map = extents_map
@@ -827,7 +637,9 @@ class Cursor(ZipFileLikeMixin):
             inodes_tree = None
             inode_map = None
 
-        return Cursor(fs, path, extents_map, inodes_ls, inodes_tree, inode_map)
+        return self.__class__(
+            fs, path, extents_map, inodes_ls, inodes_tree, inode_map
+        )
 
     def close(self):
         if not self._file.closed:
@@ -880,7 +692,7 @@ class Cursor(ZipFileLikeMixin):
         for ent in dirents:
             yield ent
 
-    def _parse(self, filesystem: Bcachefs):
+    def _parse(self, filesystem: Filesystem):
         """Generate a cache of bcachefs btrees"""
         if self._extents_map:
             return
@@ -897,7 +709,7 @@ class Cursor(ZipFileLikeMixin):
         # Load all dirents
         dirents = list(filesystem.dirents())
         for dirent in dirents:
-            if dirent.is_dir:
+            if dirent.is_dir():
                 self._inodes_ls.setdefault(dirent.inode, [])
 
         for dirent in dirents:
@@ -941,8 +753,8 @@ class Cursor(ZipFileLikeMixin):
             self._inodes_ls[parent_inode] = self._unique_dirent_list(ls)
 
     def _walk(self, top: str, dirent: DirEnt):
-        dirs = [ent for ent in self._inodes_ls[dirent.inode] if ent.is_dir]
-        files = [ent for ent in self._inodes_ls[dirent.inode] if ent.is_file]
+        dirs = [ent for ent in self._inodes_ls[dirent.inode] if ent.is_dir()]
+        files = [ent for ent in self._inodes_ls[dirent.inode] if ent.is_file()]
         yield top, dirs, files
         for d in dirs:
             yield from self._walk(os.path.join(top, d.name), d)
@@ -975,6 +787,123 @@ class Cursor(ZipFileLikeMixin):
         # It's possible to have multiple inodes for a single file and this
         # implementation assumes that the last inode should be the correct one.
         return list({ent.name: ent for ent in dirent_ls}.values())
+
+
+class Bcachefs(Filesystem):
+    CursorCls = Cursor
+
+    def __init__(self, path: str, mode: str = "rb"):
+        assert mode in ("r", "rb"), "Only reading is supported"
+        self._filesystem = _Bcachefs()
+        self._filesystem.open(path)
+        self._file: io.RawIOBase = open(path, "rb")
+        self._unmounted = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        del type, value, traceback
+        self.umount()
+
+    def __iter__(self):
+        return BcachefsIterDirEnt(self._filesystem)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_file"] = self._file.name
+        del state["_filesystem"]
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__ = {**self.__dict__, **state}
+        self._file = open(self._file, "rb")
+        if self._unmounted:
+            self._filesystem = None
+            self._file.close()
+        else:
+            self._filesystem = _Bcachefs()
+            self._filesystem.open(self._file.name)
+
+    @property
+    def filename(self) -> str:
+        return self._file.name
+
+    @property
+    def unmounted(self) -> bool:
+        return self._unmounted
+
+    def cd(self, path: Union[str, DirEnt] = ""):
+        return self.CursorCls(self, path)
+
+    def extents(self):
+        for extent in BcachefsIterExtent(self._filesystem):
+            yield extent
+
+    def inodes(self):
+        for inode in BcachefsIterInode(self._filesystem):
+            yield inode
+
+    def dirents(self):
+        for dirent in BcachefsIterDirEnt(self._filesystem):
+            yield dirent
+
+    def umount(self):
+        if not self._unmounted:
+            self._filesystem.close()
+            self._filesystem = None
+            self._file.close()
+            self._unmounted = True
+
+    def _find_extent(self, inode: int, file_offset: int) -> Extent:
+        extent = (
+            self._filesystem.find_extent(inode, file_offset) if inode else None
+        )
+        return Extent(*extent) if extent else None
+
+    def _find_extents(self, inode: int) -> Generator[Extent, None, None]:
+        extent = self._find_extent(inode, 0)
+        while extent:
+            yield extent
+            extent = self._find_extent(inode, extent.file_offset + extent.size)
+
+    def _find_inode(self, inode: int) -> Inode:
+        inode = self._filesystem.find_inode(inode)
+        return Inode(*inode) if inode else None
+
+    def _find_dirent(self, path: Union[bytes, str] = None) -> DirEnt:
+        dirent = ROOT_DIRENT
+        if path:
+            if isinstance(path, str):
+                path = path.encode()
+            parts = [p for p in path.split(b"/") if p]
+            while parts:
+                dirent = self._filesystem.find_dirent(
+                    dirent.inode, 0, parts.pop(0)
+                )
+                if dirent is None:
+                    break
+                else:
+                    dirent = DirEnt(*dirent)
+        return dirent
+
+    def _find_dirents(
+        self, dirent: DirEnt = None
+    ) -> Generator[DirEnt, None, None]:
+        iter = BcachefsIterDirEnt(self._filesystem)
+        for ent in iter:
+            if ent.parent_inode == dirent.inode:
+                yield ent
+            elif ent.parent_inode > dirent.inode:
+                break
+
+    def _walk(self, top: str, dirent: DirEnt):
+        ls = set(self.scandir(dirent))
+        dirs = [ent for ent in ls if ent.is_dir()]
+        files = [ent for ent in ls if ent.is_file()]
+        yield top, dirs, files
+        for d in dirs:
+            yield from self._walk(os.path.join(top, d.name), d)
 
 
 class BcachefsIter:
