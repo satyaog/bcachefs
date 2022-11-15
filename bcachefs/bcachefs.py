@@ -3,7 +3,7 @@
 import io
 import os
 from dataclasses import dataclass
-from typing import Generator, Union
+from typing import Generator, List, Union
 
 import numpy as np
 
@@ -348,6 +348,16 @@ class Filesystem:
             Path or DirEnt of a file or directory
         """
         return Cursor(self, path)
+
+    def isdir(self, path: Union[str, DirEnt]):
+        if not isinstance(path, DirEnt):
+            path = self._find_dirent(path)
+        return path.is_dir()
+
+    def isfile(self, path: Union[str, DirEnt]):
+        if not isinstance(path, DirEnt):
+            path = self._find_dirent(path)
+        return path.is_file()
 
     def open(
         self, name: Union[str, int], mode: str = "rb", encoding: str = "utf-8"
@@ -967,3 +977,7 @@ class BcachefsIterDirEnt(BcachefsIter):
             self._deleted.add((dirent.parent_inode, dirent.name))
             dirent = DirEnt(*super(BcachefsIterDirEnt, self).__next__())
         return dirent
+
+
+def walk_comp(root: str, dirs: List[DirEnt], files: List[DirEnt]):
+    return (root, [_d.name for _d in dirs], [_f.name for _f in files])
