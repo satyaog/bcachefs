@@ -21,25 +21,25 @@ then
 	TMP_DIR=${PWD}/tmp/
 fi
 
-NAME=`realpath "${NAME}"`
-CONTENT_SRC=`realpath "${CONTENT_SRC}"`
-TMP_DIR=`realpath "${TMP_DIR}"`
+NAME=`readlink -f "${NAME}"`
+CONTENT_SRC=`readlink -f "${CONTENT_SRC}"`
+TMP_DIR=`readlink -f "${TMP_DIR}"`
 
 mkdir -p "${TMP_DIR}"/
 
 # Compute disk image size
 if [ -z "${SIZE}" ]
 then
-	SIZE=$(du -s --block-size=1 "${CONTENT_SRC}"/ | tail -n 1 | cut -f 1)
+	SIZE=$(du -Ls --block-size=1 "${CONTENT_SRC}"/ | tail -n 1 | cut -f 1)
 	SIZE=$(( ${SIZE} + ${SIZE} / 5 )) # +20% to avoid no more space left
-	if [[ ${SIZE} -lt 10485760 ]] # 10 MiB
+	if [ ${SIZE} -lt 10485760 ] # 10 MiB
 	then
 		SIZE=10485760
 	fi
 	SIZE=$(numfmt --to=iec-i --suffix=B ${SIZE})
 fi
 
-if [[ ! -f "${NAME}".md5sums ]]
+if [ ! -f "${NAME}".md5sums ]
 then
 	pushd "${CONTENT_SRC}" >/dev/null
 	find -type f -exec md5sum {} + > "${NAME}".md5sums
@@ -50,7 +50,7 @@ fi
 pushd `dirname "${BASH_SOURCE[0]}"` >/dev/null
 
 chmod +x bcachefs-tools.sif
-if [[ ${SIZE} != -1 ]]
+if [ ${SIZE} != -1 ]
 then
 	# Create disk image
 	NAME="${NAME}" SIZE=${SIZE} ./create_img.sh

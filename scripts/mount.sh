@@ -21,7 +21,13 @@ then
 	TMP_DIR="${PWD}/.tmp/"
 fi
 
+NAME=`readlink -f "${NAME}"`
+CONTENT_SRC=`readlink -f "${CONTENT_SRC}"`
+SCRIPTS_DIR=`readlink -f "${SCRIPTS_DIR}"`
+TMP_DIR=`readlink -f "${TMP_DIR}"`
+
 singularity instance stop bcachefs >/dev/null 2>&1 || echo -n
+timeout --kill-after 30m --preserve-status 1h ${SCRIPTS_DIR}/bcachefs-tools.sif fsck -y "${NAME}"
 singularity instance start --fakeroot -B "${PWD}/":"${PWD}/":ro \
 	-B "${NAME}":/bch/disk.img:rw \
 	-B "${NAME}".md5sums:/bch/disk.img.md5sums:ro \
