@@ -686,7 +686,7 @@ class Cursor(Filesystem):
         ):
             dirent = self._fs._find_dirent(path)
         elif path:
-            parts = [p for p in path.split("/") if p]
+            parts = [p for p in path.split("/") if p and p != "."]
             while parts:
                 dirent = self._inodes_tree.get(
                     (dirent.inode, parts.pop(0)), None
@@ -886,7 +886,7 @@ class Bcachefs(Filesystem):
         if path:
             if isinstance(path, str):
                 path = path.encode()
-            parts = [p for p in path.split(b"/") if p]
+            parts = [p for p in path.split(b"/") if p and p != b"."]
             while parts:
                 dirent = self._filesystem.find_dirent(
                     dirent.inode, 0, parts.pop(0)
@@ -980,4 +980,4 @@ class BcachefsIterDirEnt(BcachefsIter):
 
 
 def walk_comp(root: str, dirs: List[DirEnt], files: List[DirEnt]):
-    return (root, [_d.name for _d in dirs], [_f.name for _f in files])
+    return root, [_d.name for _d in dirs], [_f.name for _f in files]
