@@ -319,8 +319,7 @@ class _BcachefsFileBinary(io.BufferedIOBase):
 
 class Filesystem:
     def __enter__(self):
-        self.mount()
-        return self
+        raise NotImplementedError()
 
     def __exit__(self, type, value, traceback):
         del type, value, traceback
@@ -586,16 +585,17 @@ class Cursor(Filesystem):
         self._inodes_ls = inodes_ls
         self._inodes_tree = inodes_tree
         self._inode_map = inode_map
+        self._closed = False
         self._parse(fs)
 
         # self._fs is used to init cache and as a backup for content not included in cache
-        self._fs = Bcachefs(fs.filename)
+        self._fs = Bcachefs(self._file.name)
 
     def __enter__(self):
-        if self._file.closed:
+        if self._closed:
             self._file = open(self._file.name, "rb")
-        if self._fs.unmounted:
             self._fs = Bcachefs(self._file.name)
+            self._closed = False
         return self
 
     def __exit__(self, type, value, traceback):
@@ -612,11 +612,17 @@ class Cursor(Filesystem):
     def __getstate__(self):
         state = self.__dict__.copy()
         state["_file"] = self._file.name
+        del state["_fs"]
         return state
 
     def __setstate__(self, state):
         self.__dict__ = {**self.__dict__, **state}
         self._file = open(self._file, "rb")
+        if self._closed:
+            self._fs = None
+            self._file.close()
+        else:
+            self._fs = Bcachefs(self._file.name)
 
     @property
     def filename(self) -> str:
@@ -624,7 +630,7 @@ class Cursor(Filesystem):
 
     @property
     def closed(self) -> bool:
-        return self._file.closed
+        return self._closed
 
     @property
     def pwd(self) -> str:
@@ -652,10 +658,11 @@ class Cursor(Filesystem):
         )
 
     def close(self):
-        if not self._file.closed:
-            self._file.close()
-        if not self._fs.unmounted:
+        if not self._closed:
             self._fs.umount()
+            self._fs = None
+            self._file.close()
+            self._closed = True
 
     def _find_extent(self, inode: int, file_offset: int) -> Extent:
         for extent in self._find_extents(inode):
