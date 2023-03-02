@@ -58,12 +58,16 @@ async def _make_disk_image(env: dict):
         with contextlib.suppress(asyncio.TimeoutError):
             await asyncio.wait_for(main_p.communicate(), timeout=60)
         if main_p.returncode is None:
-            try:
-                main_p.kill()
-                force_unmount = True
-            except ProcessLookupError:
-                # process already done
-                pass
+            with contextlib.suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(main_p.communicate(), timeout=5 * 60)
+
+            if main_p.returncode is None:
+                try:
+                    main_p.kill()
+                    force_unmount = True
+                except ProcessLookupError:
+                    # process already done
+                    pass
         force_unmount = (
             force_unmount or main_p.returncode != 0 or cp_p_retcode != 0
         )
